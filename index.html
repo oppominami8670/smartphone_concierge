@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スマホコンシェルジュ Fully Automated</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --theme-color: #333; --bg: #f4f7f9; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 10px; color: #333; }
+        .header { text-align: center; padding: 15px; background: white; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; border-top: 6px solid var(--theme-color); }
+        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .carrier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .carrier-btn { padding: 18px 5px; border: 2px solid #eee; border-radius: 12px; background: white; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-group { display: flex; flex-direction: column; gap: 8px; }
+        .btn { border: 1px solid #ddd; background: white; padding: 15px; border-radius: 10px; text-align: left; font-size: 16px; }
+        .btn:active { background: #f0f0f0; border-color: var(--theme-color); }
+        .result-item { padding: 12px; border-left: 5px solid var(--theme-color); background: #fdfdfd; margin-bottom: 10px; font-weight: bold; font-size: 1.1em; }
+        
+        .comparison-table { width: 100%; border-collapse: collapse; font-size: 1em; table-layout: fixed; margin-top: 15px; }
+        .comparison-table th, .comparison-table td { border: 1px solid #eee; padding: 12px 6px; text-align: center; }
+        .comparison-table th { background: #fafafa; font-size: 1em; }
+        .comparison-table td:first-child { font-weight: bold; background: #fcfcfc; text-align: center; width: 35%; font-size: 1.3em; }
+        
+        .score-high { color: var(--theme-color); font-weight: bold; }
+        .restart-btn { width: 100%; background: var(--theme-color); color: white; padding: 15px; border: none; border-radius: 10px; font-weight: bold; margin-top: 20px; font-size: 1.1em; }
+        .chart-container { position: relative; margin: 30px 0; width: 100%; }
+    </style>
+</head>
+<body>
+
+<div class="header"><h1 id="main-title" style="margin:0; font-size:18px;">スマホ診断</h1></div>
+
+<div id="app">
+    <div id="loading" class="card" style="text-align:center;">データを読み込み中...</div>
+
+    <div id="carrier-select" class="card" style="display:none;">
+        <h3 style="margin-top:0;">キャリアを選択</h3>
+        <div class="carrier-grid">
+            <button class="carrier-btn" onclick="selectCarrier('楽天モバイル','#bf0000')">楽天モバイル</button>
+            <button class="carrier-btn" onclick="selectCarrier('ドコモ','#ff0000')">ドコモ</button>
+            <button class="carrier-btn" onclick="selectCarrier('au','#ff6600')">au</button>
+            <button class="carrier-btn" onclick="selectCarrier('ソフトバンク','#555')">ソフトバンク</button>
+            <button class="carrier-btn" onclick="selectCarrier('UQモバイル','#003399')">UQモバイル</button>
+            <button class="carrier-btn" onclick="selectCarrier('ワイモバイル','#e60012')">ワイモバイル</button>
+        </div>
+    </div>
+
+    <div id="question-container" class="card" style="display:none;">
+        <div id="q-progress" style="font-weight:bold; margin-bottom:5px;"></div>
+        <div id="q-text" style="font-size:1.2em; font-weight:bold; margin-bottom:20px; min-height: 2.5em;"></div>
+        <div class="btn-group">
+            <button class="btn" onclick="answer(10)">☆ 最優先（絶対に譲れない）</button>
+            <button class="btn" onclick="answer(7.5)">◎ 重視する</button>
+            <button class="btn" onclick="answer(5.0)">〇 あれば嬉しい（普通）</button>
+            <button class="btn" onclick="answer(2.5)">△ あまり気にしない</button>
+            <button class="btn" onclick="answer(0)">× 全く不要</button>
+        </div>
+    </div>
+
+    <div id="result-area" style="display:none;">
+        <div class="card">
+            <h3 style="margin-top:0;">オススメの3機種</h3>
+            <div id="recommendation-list"></div>
+            <div class="chart-container"><canvas id="radarChart"></canvas></div>
+            <h3 style="margin-top:20px;">性能比較</h3>
+            <div style="overflow-x: auto;">
+                <table class="comparison-table" id="comparison-table">
+                    <thead><tr><th>機種</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <button class="restart-btn" onclick="location.reload()">最初に戻る</button>
+    </div>
+</div>
+
+<script>
+const gasUrl = "https://script.google.com/macros/s/AKfycbzwPUMdKKtuSIHMeaY97Uj1GIo3SziWCN1DDB2hjS8FZOg17BjMLSBwR6e7wt_Y-AbQJw/exec";
+let masterData = { questions: [], devices: [] };
+let filteredDevices = [];
+let currentQ = 0;
+let userProfile = {};
+
+async function loadData() {
+    try {
+        const response = await fetch(gasUrl);
+        masterData = await response.json();
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('carrier-select').style.display = 'block';
+    } catch (e) { document.getElementById('loading').innerText = "通信エラー"; }
+}
+
+function selectCarrier(name, color) {
+    document.documentElement.style.setProperty('--theme-color', color);
+    document.getElementById('main-title').innerText = name + " 診断";
+    filteredDevices = masterData.devices.filter(d => d.carriers.includes(name));
+    if(filteredDevices.length === 0) { alert("データがありません"); return; }
+    document.getElementById('carrier-select').style.display = 'none';
+    document.getElementById('question-container').style.display = 'block';
+    updateQuestion();
+}
+
+function updateQuestion() {
+    const q = masterData.questions[currentQ];
+    document.getElementById('q-progress').innerText = `質問 ${currentQ + 1} / ${masterData.questions.length}`;
+    document.getElementById('q-progress').style.color = getComputedStyle(document.documentElement).getPropertyValue('--theme-color');
+    document.getElementById('q-text').innerText = q.text;
+}
+
+function answer(score) {
+    userProfile[masterData.questions[currentQ].key] = score;
+    currentQ++;
+    if (currentQ < masterData.questions.length) updateQuestion();
+    else showResult();
+}
+
+function showResult() {
+    document.getElementById('question-container').style.display = 'none';
+    document.getElementById('result-area').style.display = 'block';
+    
+    const sorted = filteredDevices.map(d => {
+        let diff = 0;
+        masterData.questions.forEach(q => {
+            diff += Math.pow((userProfile[q.key] || 5) - d.scores[q.key], 2);
+        });
+        return { ...d, distance: Math.sqrt(diff) };
+    }).sort((a, b) => a.distance - b.distance);
+    
+    const recs = sorted.slice(0, 3);
+    recs.forEach((d, i) => {
+        const match = Math.round((1 - d.distance / 25) * 100);
+        document.getElementById('recommendation-list').innerHTML += `<div class="result-item">第${i+1}位: ${d.name} <span style="float:right; color:var(--theme-color)">${match}%</span></div>`;
+    });
+    drawChart();
+    createTable(recs);
+}
+
+function drawChart() {
+    const tColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-color').trim();
+    new Chart(document.getElementById('radarChart'), {
+        type: 'radar',
+        data: {
+            labels: masterData.questions.map(q => q.label), // H列のラベルを使用
+            datasets: [{
+                data: masterData.questions.map(q => userProfile[q.key]),
+                borderColor: tColor,
+                backgroundColor: tColor + '33',
+                pointBackgroundColor: tColor,
+                pointRadius: 5
+            }]
+        },
+        options: {
+            scales: {
+                r: {
+                    min: 0, max: 10,
+                    ticks: { display: false },
+                    pointLabels: { font: { size: 32, weight: 'bold' }, color: '#444' },
+                    grid: { color: '#ddd' },
+                    angleLines: { color: '#ddd' }
+                }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function createTable(recs) {
+    const table = document.getElementById('comparison-table');
+    const thead = table.querySelector('thead tr');
+    recs.forEach(d => thead.innerHTML += `<th>${d.name}</th>`);
+    const tbody = table.querySelector('tbody');
+    
+    masterData.questions.forEach((qMaster) => {
+        let row = `<tr><td>${qMaster.label}</td>`; // H列のラベルを使用
+        recs.forEach(d => {
+            const score = d.scores[qMaster.key];
+            let note = "";
+            if (score >= 9)      note = qMaster.notes.step5;
+            else if (score >= 7) note = qMaster.notes.step4;
+            else if (score >= 5) note = qMaster.notes.step3;
+            else if (score >= 3) note = qMaster.notes.step2;
+            else                 note = qMaster.notes.step1;
+            
+            const isHigh = score >= 8 ? 'class="score-high"' : '';
+            row += `<td ${isHigh}>${note}</td>`;
+        });
+        row += `</tr>`;
+        tbody.innerHTML += row;
+    });
+}
+window.onload = loadData;
+</script>
+</body>
+</html>

@@ -3,26 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スマホコンシェルジュ Pro Dynamic</title>
+    <title>スマホコンシェルジュ Pro+</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root { --theme-color: #333; --bg: #f4f7f9; }
-        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 10px; color: #333; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 10px; color: #333; line-height: 1.4; }
         .header { text-align: center; padding: 15px; background: white; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; border-top: 6px solid var(--theme-color); }
         .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        
+        /* キャリアグリッド */
         .carrier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .carrier-btn { padding: 18px 5px; border: 2px solid #eee; border-radius: 12px; background: white; font-weight: bold; cursor: pointer; font-size: 14px; }
-        .btn-group { display: flex; flex-direction: column; gap: 8px; }
-        .btn { border: 1px solid #ddd; background: white; padding: 15px; border-radius: 10px; text-align: left; font-size: 16px; }
+        .carrier-btn { padding: 18px 5px; border: 2px solid #eee; border-radius: 12px; background: white; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .carrier-btn:active { transform: scale(0.95); background: #f9f9f9; }
+
+        /* 質問エリア */
+        .btn-group { display: flex; flex-direction: column; gap: 10px; }
+        .btn { border: 1px solid #ddd; background: white; padding: 18px; border-radius: 12px; text-align: left; font-size: 16px; font-weight: bold; cursor: pointer; }
         .btn:active { background: #f0f0f0; border-color: var(--theme-color); }
-        .result-item { padding: 12px; border-left: 5px solid var(--theme-color); background: #fdfdfd; margin-bottom: 10px; font-weight: bold; font-size: 1.1em; }
+        
+        /* 結果表示 */
+        .result-item { padding: 15px; border-left: 6px solid var(--theme-color); background: #fdfdfd; margin-bottom: 12px; font-weight: bold; font-size: 1.1em; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        
+        /* 比較表：項目名を大きく、幅を確保 */
         .comparison-table { width: 100%; border-collapse: collapse; font-size: 1em; table-layout: fixed; margin-top: 15px; }
-        .comparison-table th, .comparison-table td { border: 1px solid #eee; padding: 12px 6px; text-align: center; }
-        .comparison-table th { background: #fafafa; font-size: 1em; }
-        .comparison-table td:first-child { font-weight: bold; background: #fcfcfc; text-align: center; width: 35%; font-size: 1.3em; }
+        .comparison-table th, .comparison-table td { border: 1px solid #eee; padding: 12px 6px; text-align: center; overflow-wrap: break-word; }
+        .comparison-table th { background: #fafafa; font-size: 0.9em; vertical-align: middle; }
+        .comparison-table td:first-child { font-weight: bold; background: #fcfcfc; text-align: center; width: 38%; font-size: 1.3em; color: #111; }
+        
         .score-high { color: var(--theme-color); font-weight: bold; }
-        .restart-btn { width: 100%; background: var(--theme-color); color: white; padding: 15px; border: none; border-radius: 10px; font-weight: bold; margin-top: 20px; font-size: 1.1em; }
+        .restart-btn { width: 100%; background: var(--theme-color); color: white; padding: 18px; border: none; border-radius: 12px; font-weight: bold; margin-top: 20px; font-size: 1.2em; cursor: pointer; }
+        
         .chart-container { position: relative; margin: 30px 0; width: 100%; }
+        #loading { font-weight: bold; color: #666; }
     </style>
 </head>
 <body>
@@ -30,10 +42,12 @@
 <div class="header"><h1 id="main-title" style="margin:0; font-size:18px;">スマホ診断</h1></div>
 
 <div id="app">
-    <div id="loading" class="card" style="text-align:center;">データを読み込み中...</div>
+    <div id="loading" class="card" style="text-align:center;">データを取得しています...</div>
+
     <div id="carrier-select" class="card" style="display:none;">
-        <h3 style="margin-top:0;">キャリアを選択</h3>
-        <div class="carrier-grid" id="carrier-buttons">
+        <h3 style="margin-top:0; text-align:center;">まずはキャリアを選択</h3>
+        <div class="carrier-grid">
+            <button class="carrier-btn" onclick="selectCarrier('SIMフリー','#666666')">SIMフリー</button>
             <button class="carrier-btn" onclick="selectCarrier('楽天モバイル','#bf0000')">楽天モバイル</button>
             <button class="carrier-btn" onclick="selectCarrier('ドコモ','#ff0000')">ドコモ</button>
             <button class="carrier-btn" onclick="selectCarrier('au','#ff6600')">au</button>
@@ -42,9 +56,10 @@
             <button class="carrier-btn" onclick="selectCarrier('ワイモバイル','#e60012')">ワイモバイル</button>
         </div>
     </div>
+
     <div id="question-container" class="card" style="display:none;">
-        <div id="q-progress" style="font-weight:bold; margin-bottom:5px;"></div>
-        <div id="q-text" style="font-size:1.2em; font-weight:bold; margin-bottom:20px; min-height: 2.5em;"></div>
+        <div id="q-progress" style="font-weight:bold; margin-bottom:8px; font-size: 0.9em;"></div>
+        <div id="q-text" style="font-size:1.25em; font-weight:bold; margin-bottom:25px; min-height: 2.8em; color: #111;"></div>
         <div class="btn-group">
             <button class="btn" onclick="answer(10)">☆ 最優先（絶対に譲れない）</button>
             <button class="btn" onclick="answer(7.5)">◎ 重視する</button>
@@ -53,12 +68,17 @@
             <button class="btn" onclick="answer(0)">× 全く不要</button>
         </div>
     </div>
+
     <div id="result-area" style="display:none;">
         <div class="card">
-            <h3 style="margin-top:0;">オススメの3機種</h3>
+            <h3 style="margin-top:0; border-bottom: 2px solid #eee; padding-bottom: 10px;">あなたへのオススメ</h3>
             <div id="recommendation-list"></div>
-            <div class="chart-container"><canvas id="radarChart"></canvas></div>
-            <h3 style="margin-top:20px;">性能比較</h3>
+            
+            <div class="chart-container">
+                <canvas id="radarChart"></canvas>
+            </div>
+
+            <h3 style="margin-top:30px; border-bottom: 2px solid #eee; padding-bottom: 10px;">性能比較</h3>
             <div style="overflow-x: auto;">
                 <table class="comparison-table" id="comparison-table">
                     <thead><tr><th>機種</th></tr></thead>
@@ -71,51 +91,73 @@
 </div>
 
 <script>
-const gasUrl = "https://script.google.com/macros/s/AKfycbz-Ma3-hxlbwuwp5RgO4m28jQrj7iM3jz4v8gi_H4pG9VuIc712okCkbLKCGmpCF3KmdA/exec";
+/** * GASのウェブアプリURLをここに貼り付けてください 
+ */
+const gasUrl = "https://script.google.com/macros/s/AKfycbxzL2V1qd34nH0wYjtWVWPQVEkdvCvTWT-13OP2JyjurOVc8Lf7Luq-JDHgAPrkhc8cRw/exec";
+
 let masterData = { questions: [], devices: [] };
 let filteredDevices = [];
 let currentQ = 0;
 let userProfile = {};
 
+// データ読み込み
 async function loadData() {
     try {
         const response = await fetch(gasUrl);
         masterData = await response.json();
+        if(masterData.error) throw new Error(masterData.error);
+        
         document.getElementById('loading').style.display = 'none';
         document.getElementById('carrier-select').style.display = 'block';
-    } catch (e) { document.getElementById('loading').innerText = "通信エラー"; }
+    } catch (e) { 
+        document.getElementById('loading').innerHTML = "エラーが発生しました:<br>" + e.message; 
+    }
 }
 
+// キャリア選択
 function selectCarrier(name, color) {
     document.documentElement.style.setProperty('--theme-color', color);
     document.getElementById('main-title').innerText = name + " 診断";
+    
     filteredDevices = masterData.devices.filter(d => d.carriers && d.carriers.includes(name));
-    if(filteredDevices.length === 0) { alert("該当する機種データがありません"); return; }
+    
+    if(filteredDevices.length === 0) { 
+        alert(name + "に対応した機種データが見つかりませんでした。"); 
+        return; 
+    }
+    
     document.getElementById('carrier-select').style.display = 'none';
     document.getElementById('question-container').style.display = 'block';
     updateQuestion();
 }
 
+// 質問更新
 function updateQuestion() {
     const q = masterData.questions[currentQ];
-    document.getElementById('q-progress').innerText = `質問 ${currentQ + 1} / ${masterData.questions.length}`;
+    document.getElementById('q-progress').innerText = `STEP ${currentQ + 1} / ${masterData.questions.length}`;
     document.getElementById('q-progress').style.color = getComputedStyle(document.documentElement).getPropertyValue('--theme-color');
     document.getElementById('q-text').innerText = q.text;
 }
 
+// 回答処理
 function answer(score) {
     userProfile[masterData.questions[currentQ].key] = score;
     currentQ++;
-    if (currentQ < masterData.questions.length) updateQuestion();
-    else showResult();
+    if (currentQ < masterData.questions.length) {
+        updateQuestion();
+    } else {
+        showResult();
+    }
 }
 
+// 結果算出・表示
 function showResult() {
     document.getElementById('question-container').style.display = 'none';
     document.getElementById('result-area').style.display = 'block';
     
-    // マッチ率の最大可能距離を算出 (質問数に基づく)
-    const maxPossibleDist = Math.sqrt(masterData.questions.length * Math.pow(10, 2));
+    // 質問数に基づいた最大距離の計算
+    const qCount = masterData.questions.length;
+    const maxPossibleDist = Math.sqrt(qCount * Math.pow(10, 2));
 
     const sorted = filteredDevices.map(d => {
         let diff = 0;
@@ -124,8 +166,7 @@ function showResult() {
             const dVal = d.scores[q.key] || 0;
             diff += Math.pow(uVal - dVal, 2);
         });
-        const dist = Math.sqrt(diff);
-        return { ...d, distance: dist };
+        return { ...d, distance: Math.sqrt(diff) };
     }).sort((a, b) => a.distance - b.distance);
     
     const recs = sorted.slice(0, 3);
@@ -133,20 +174,27 @@ function showResult() {
     list.innerHTML = '';
 
     recs.forEach((d, i) => {
-        // 動的なマッチ率計算: 100% - (実際の距離 / 最大距離 * 100)
         let match = Math.round((1 - d.distance / maxPossibleDist) * 100);
         if (isNaN(match) || match < 0) match = 0;
+        if (match > 100) match = 100;
 
-        list.innerHTML += `<div class="result-item">第${i+1}位: ${d.name} <span style="float:right; color:var(--theme-color)">${match}%</span></div>`;
+        list.innerHTML += `
+            <div class="result-item">
+                第${i+1}位: ${d.name} 
+                <span style="float:right; color:var(--theme-color)">${match}%</span>
+            </div>`;
     });
     
     drawChart();
     createTable(recs);
 }
 
+// グラフ描画
 function drawChart() {
+    const ctx = document.getElementById('radarChart');
     const tColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-color').trim();
-    new Chart(document.getElementById('radarChart'), {
+    
+    new Chart(ctx, {
         type: 'radar',
         data: {
             labels: masterData.questions.map(q => q.label),
@@ -155,15 +203,19 @@ function drawChart() {
                 borderColor: tColor,
                 backgroundColor: tColor + '33',
                 pointBackgroundColor: tColor,
-                pointRadius: 5
+                pointRadius: 6,
+                borderWidth: 3
             }]
         },
         options: {
             scales: {
                 r: {
                     min: 0, max: 10,
-                    ticks: { display: false },
-                    pointLabels: { font: { size: 32, weight: 'bold' }, color: '#444' },
+                    ticks: { display: false, stepSize: 2 },
+                    pointLabels: { 
+                        font: { size: 30, weight: 'bold' }, // グラフ文字サイズ
+                        color: '#333' 
+                    },
                     grid: { color: '#ddd' },
                     angleLines: { color: '#ddd' }
                 }
@@ -173,21 +225,23 @@ function drawChart() {
     });
 }
 
+// 比較表生成
 function createTable(recs) {
     const table = document.getElementById('comparison-table');
     const thead = table.querySelector('thead tr');
-    // ヘッダーをリセットして機種名を追加
     thead.innerHTML = '<th>機種</th>';
     recs.forEach(d => thead.innerHTML += `<th>${d.name}</th>`);
     
     const tbody = table.querySelector('tbody');
-    tbody.innerHTML = ''; // ボディをリセット
+    tbody.innerHTML = '';
 
     masterData.questions.forEach((qMaster) => {
         let row = `<tr><td>${qMaster.label}</td>`;
         recs.forEach(d => {
             const score = d.scores[qMaster.key] || 0;
             let note = "";
+            
+            // 5段階引用ロジック
             if (score >= 9)      note = qMaster.notes.step5;
             else if (score >= 7) note = qMaster.notes.step4;
             else if (score >= 5) note = qMaster.notes.step3;
@@ -201,7 +255,9 @@ function createTable(recs) {
         tbody.innerHTML += row;
     });
 }
+
 window.onload = loadData;
 </script>
 </body>
 </html>
+
